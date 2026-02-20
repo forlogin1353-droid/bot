@@ -1,6 +1,6 @@
 const mineflayer = require('mineflayer')
 
-// Suppress annoying punycode deprecation warning
+// Suppress punycode deprecation warning (common in recent Node versions)
 process.removeAllListeners('warning')
 process.on('warning', (warning) => {
   if (warning.name === 'DeprecationWarning' && warning.message.includes('punycode')) {
@@ -9,25 +9,31 @@ process.on('warning', (warning) => {
   console.warn(warning)
 })
 
-// ---------------------
-// CONFIG - CHANGE VERSION TO MATCH YOUR ATERNOS SERVER
-// ---------------------
+// ──────────────────────────────────────────────
+// CONFIGURATION – CHANGE THESE VALUES AS NEEDED
+// ──────────────────────────────────────────────
 const CONFIG = {
   host: 'noblockcg.aternos.me',
   port: 55696,
-  username: 'MyCoolBot',          // Change to any name you like
-  version: '1.21',                // ← VERY IMPORTANT: set exact version, e.g. '1.20.4', '1.21.1', '1.20.6'
-  auth: 'offline'                 // 'offline' = cracked, 'microsoft' = premium account
+  username: 'MyCoolBot',           // ← change this name if you want
+  version: '1.21',                 // ← MUST MATCH your Aternos server version exactly
+                                   //    (check Aternos dashboard: e.g. '1.20.6', '1.21.1', '1.20.4')
+  auth: 'offline'                  // 'offline' = cracked server
+                                   // 'microsoft' = premium account (needs login on first run)
 }
 
-// ---------------------
-// BOT CREATION & RECONNECT LOGIC
-// ---------------------
+// ──────────────────────────────────────────────
+// RECONNECT CONTROL
+// ──────────────────────────────────────────────
 let reconnectAttempts = 0
 const MAX_RECONNECT_ATTEMPTS = 10
+const RECONNECT_DELAY_MS = 8000   // 8 seconds – gives Aternos time to stabilize
 
+// ──────────────────────────────────────────────
+// CREATE BOT FUNCTION (called on start + reconnect)
+// ──────────────────────────────────────────────
 function createBotInstance() {
-  console.log(`Creating bot instance (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})...`)
+  console.log(`[Bot] Creating new instance (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`)
 
   const bot = mineflayer.createBot({
     host: CONFIG.host,
@@ -37,19 +43,36 @@ function createBotInstance() {
     auth: CONFIG.auth,
     keepAlive: true,
     checkTimeoutInterval: 60000,   // 60 seconds
-    connectTimeout: 30000          // 30 seconds to connect
+    connectTimeout: 30000          // 30 seconds
   })
 
-  // ---------------------
+  // ──────────────────────────────────────────────
   // EVENTS
-  // ---------------------
+  // ──────────────────────────────────────────────
   bot.once('spawn', () => {
-    console.log(`Bot ${bot.username} successfully joined the server!`)
-    bot.chat('Hello from my bot! 👋 I am online now.')
-    reconnectAttempts = 0 // reset counter on success
+    console.log(`[Bot] ${bot.username} joined the server successfully!`)
+    bot.chat('Hello! Bot is here 👋')
+
+    // ─── Anti-AFK loop ───────────────────────────
+    setInterval(() => {
+      if (!bot.entity) return
+
+      // Random look around
+      const yaw   = Math.random() * Math.PI * 2 - Math.PI
+      const pitch = (Math.random() - 0.5) * Math.PI / 2
+      bot.look(yaw, pitch, true)
+
+      // Random jump (≈30% chance)
+      if (Math.random() < 0.3) {
+        bot.setControlState('jump', true)
+        setTimeout(() => bot.setControlState('jump', false), 150)
+      }
+
+      console.log('[Anti-AFK] Looked around' + (Math.random() < 0.3 ? ' + jumped' : ''))
+    }, 25000 + Math.random() * 15000)   // 25–40 seconds interval
   })
 
-  // Chat event with try-catch to prevent crash on bad chat packets
+  // Chat – protected against bad packets
   bot.on('chat', (username, message) => {
     if (username === bot.username) return
 
@@ -57,41 +80,46 @@ function createBotInstance() {
       console.log(`[${username}] ${message}`)
 
       if (message.toLowerCase() === 'hi') {
-        bot.chat(`Hi ${username}! How's it going?`)
+        bot.chat(`Hi ${username}! 😄`)
       } else if (message.toLowerCase().includes('follow')) {
-        bot.chat('Coming to follow you! (pathfinder can be added later)')
+        bot.chat("I'd love to follow, but I need pathfinder plugin for that!")
       }
     } catch (err) {
-      console.error('Chat event error (ignored bad packet):', err.message)
+      console.error('[Chat error – ignored bad packet]', err.message)
     }
   })
 
   bot.on('kicked', (reason) => {
-    console.log(`Kicked from server: ${JSON.stringify(reason)}`)
+    let reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason)
+    console.log(`[Kicked] ${reasonStr}`)
   })
 
   bot.on('error', (err) => {
-    console.error('Bot error:', err.message, err.stack || '')
+    console.error('[Error]', err.message)
+    if (err.stack) console.error(err.stack.split('\n').slice(0,6).join('\n'))
   })
 
   bot.on('end', (reason) => {
-    console.log(`Disconnected: ${reason || 'unknown reason'}`)
+    let reasonStr = reason || 'no reason provided'
+    console.log(`[Disconnected] ${reasonStr}`)
 
     reconnectAttempts++
     if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.log(`Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Stopping.`)
+      console.log(`Max reconnect attempts reached (${MAX_RECONNECT_ATTEMPTS}). Stopping.`)
       return
     }
 
     setTimeout(() => {
-      console.log(`Reconnecting in 5 seconds...`)
+      console.log(`Reconnecting in ${RECONNECT_DELAY_MS / 1000} seconds...`)
       createBotInstance()
-    }, 5000)
+    }, RECONNECT_DELAY_MS)
   })
 
   return bot
 }
 
-// Start everything
-console.log('Minecraft bot process starting...')
+// ──────────────────────────────────────────────
+// START
+// ──────────────────────────────────────────────
+console.log('Minecraft bot starting...')
 createBotInstance()
