@@ -8,7 +8,7 @@ const CONFIG = {
   host: 'noblockcg.aternos.me',
   port: 55696,
   username: 'MyCoolBot',
-  version: '1.21',  // ← EXACT Aternos version!
+  version: '1.21.11',  // ← EXACT Aternos version!
   auth: 'offline'
 }
 
